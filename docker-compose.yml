@@ -23,6 +23,25 @@ services:
       retries: 5
       start_period: 5s
 
+  minio:
+    image: "minio/minio:latest"
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - web-net
+    env_file: ./config/.env
+    healthcheck:
+      test: mc ready local || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   web:
     <<: &web
       # Image name is changed in production:
@@ -42,6 +61,8 @@ services:
         - django-static:/var/www/django/static
       depends_on:
         db:
+          condition: service_healthy
+        minio:
           condition: service_healthy
       networks:
         - web-net
@@ -71,4 +92,5 @@ networks:
 
 volumes:
   postgres-data:
+  minio-data:
   django-static:

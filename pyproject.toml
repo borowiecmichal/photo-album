@@ -28,7 +28,9 @@ django-csp = "^4.0"
 django-health-check = "^3.18"
 django-permissions-policy = "^4.27"
 django-stubs-ext = "^5.1"
+django-storages = "^1.14"
 
+boto3 = "^1.37"
 psycopg2-binary = "^2.9"
 gunicorn = "^23.0"
 python-decouple = "^3.8"
@@ -57,6 +59,7 @@ pytest-randomly = "^4.0"
 pytest-timeout = "^2.3"
 django-test-migrations = "^1.5"
 hypothesis = "^6.123"
+moto = { version = "^5.0", extras = ["s3"] }
 
 django-stubs = { version = ">=5.2,<5.3", extras = ["compatible-mypy"] }
 
