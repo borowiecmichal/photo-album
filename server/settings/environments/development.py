@@ -164,3 +164,16 @@ EXTRA_CHECKS = {
 # Disable persistent DB connections
 # https://docs.djangoproject.com/en/5.2/ref/databases/#caveats
 DATABASES['default']['CONN_MAX_AGE'] = 0
+
+# MinIO storage configuration for development
+# MinIO is S3-compatible local object storage for development
+AWS_S3_ENDPOINT_URL = config(
+    'AWS_S3_ENDPOINT_URL',
+    default='http://minio:9000',
+)
+
+# django-axes settings for development
+# Increase failure limit for WebDAV clients that send multiple requests
+AXES_FAILURE_LIMIT = 20  # Default is 5
+AXES_COOLOFF_TIME = 0.5  # 30 minutes cooloff (in hours), reduced for dev
+AXES_RESET_ON_SUCCESS = True  # Reset failed attempts on successful login

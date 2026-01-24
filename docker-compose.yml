@@ -70,6 +70,7 @@ services:
       env_file: ./config/.env
       environment:
         DJANGO_DATABASE_HOST: db
+        POETRY_CACHE_DIR: /tmp/poetry-cache
 
     command: python -We -bb manage.py runserver 0.0.0.0:8000
     healthcheck:
@@ -79,10 +80,17 @@ services:
       retries: 5
       start_period: 30s
 
-# This task is an example of how to extend existing ones:
-#   some_worker:
-#     <<: *web
-#     command: python manage.py worker_process
+  webdav:
+    <<: *web
+    command: python manage.py run_webdav_server --verbose=5
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: python -c "import socket; s=socket.socket(); s.connect(('localhost', 8080)); s.close()"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 networks:
   # Network for postgres, use it for services that need access to the db:

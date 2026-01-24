@@ -75,3 +75,13 @@ SECURE_REDIRECT_EXEMPT = [
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+
+# Cloudflare R2 storage configuration for production
+# R2 is S3-compatible with no egress fees
+# Endpoint format: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+AWS_S3_ENDPOINT_URL = config('AWS_S3_ENDPOINT_URL')  # Required for R2
+AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='auto')
+AWS_S3_ADDRESSING_STYLE = config(
+    'AWS_S3_ADDRESSING_STYLE',
+    default='auto',
+)

@@ -22,6 +22,8 @@ SECRET_KEY = config('DJANGO_SECRET_KEY')
 INSTALLED_APPS: tuple[str, ...] = (
     # Your apps go here:
     'server.apps.main',
+    'server.apps.files',
+    'server.apps.webdav',
     # Default django apps:
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -31,6 +33,8 @@ INSTALLED_APPS: tuple[str, ...] = (
     # django-admin:
     'django.contrib.admin',
     'django.contrib.admindocs',
+    #
+    "django_extensions",
     # Security:
     'axes',
     # Health checks:

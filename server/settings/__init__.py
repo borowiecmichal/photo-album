@@ -27,6 +27,8 @@ _base_settings = (
     'components/logging.py',
     'components/csp.py',
     'components/caches.py',
+    'components/storages.py',
+    'components/webdav.py',
     # Select the right env:
     f'environments/{_ENV}.py',
     # Optionally override some settings:

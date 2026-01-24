@@ -25,24 +25,23 @@ This project follows strict code quality standards enforced by wemake-python-sty
 
 ## Development Commands
 
-### Initial Setup (Local)
+**IMPORTANT: Backend Command Execution**
+
+All backend-related commands (Django management commands, Poetry dependency management, database operations, testing, etc.) **MUST** be executed inside the Docker Compose container using:
 
 ```bash
-# Install dependencies
-poetry install
-
-# Activate virtualenv
-poetry shell
-
-# Create development database
-psql postgres -U postgres -f scripts/create_dev_database.sql
-
-# Run migrations
-python manage.py migrate
-
-# Start development server
-python manage.py runserver
+docker compose exec web <command>
 ```
+
+**Examples:**
+- `docker compose exec web python manage.py migrate`
+- `docker compose exec web poetry add package-name`
+- `docker compose exec web pytest tests/`
+- `docker compose exec web python manage.py createsuperuser`
+
+This ensures commands run in the correct environment with all dependencies and services (database, MinIO, etc.) available. The `--rm` flag automatically removes the container after execution.
+
+**Exception**: Local development setup commands (if not using Docker) can be run directly on the host machine.
 
 ### Initial Setup (Docker)
 
@@ -59,86 +58,108 @@ docker compose run --rm web <command>
 
 ### Testing
 
+**Note**: Run all test commands inside Docker container.
+
 ```bash
 # Run all tests with coverage (requires 100% coverage)
-pytest
+docker compose run --rm web pytest
 
 # Run specific test file
-pytest tests/test_main.py
+docker compose run --rm web pytest tests/test_main.py
 
 # Run specific test
-pytest tests/test_main.py::test_function_name
+docker compose run --rm web pytest tests/test_main.py::test_function_name
 
 # Run tests without coverage (faster)
-pytest --no-cov
+docker compose run --rm web pytest --no-cov
 ```
 
 All tests have a 5-second timeout (configured in setup.cfg). Tests run with random order via pytest-randomly for better reliability.
 
 ### Code Quality
 
+**Note**: Code quality tools can be run locally (faster) or in Docker container. For consistency, prefer Docker.
+
 ```bash
 # Run ruff linter
-ruff check .
+docker compose run --rm web ruff check .
+# Or locally: ruff check .
 
 # Run ruff formatter
-ruff format .
+docker compose run --rm web ruff format .
+# Or locally: ruff format .
 
 # Run type checking
-mypy server/ tests/
+docker compose run --rm web mypy server/ tests/
+# Or locally: mypy server/ tests/
 
 # Run wemake-python-styleguide
-flake8
+docker compose run --rm web flake8
+# Or locally: flake8
 
 # Lint Django templates
-djlint server/ --check
+docker compose run --rm web djlint server/ --check
+# Or locally: djlint server/ --check
 
 # Format Django templates
-djlint server/ --reformat
+docker compose run --rm web djlint server/ --reformat
+# Or locally: djlint server/ --reformat
 
 # Lint YAML files
-yamllint .
+docker compose run --rm web yamllint .
+# Or locally: yamllint .
 
 # Check dependencies for security issues
-safety check
+docker compose run --rm web safety check
+# Or locally: safety check
 
 # Lint .env files
-dotenv-linter config/
+docker compose run --rm web dotenv-linter config/
+# Or locally: dotenv-linter config/
 ```
 
 ### Database Management
 
+**Note**: Run all Django management commands inside Docker container.
+
 ```bash
 # Create migrations
-python manage.py makemigrations
+docker compose run --rm web python manage.py makemigrations
 
 # Apply migrations
-python manage.py migrate
+docker compose run --rm web python manage.py migrate
 
 # Check for migration issues
-python manage.py lintmigrations
+docker compose run --rm web python manage.py lintmigrations
 
 # Create Django superuser
-python manage.py createsuperuser
+docker compose run --rm web python manage.py createsuperuser
 ```
 
 ### Dependency Management
 
+**Note**: Run all Poetry commands inside Docker container to ensure consistency.
+
 ```bash
 # Add production dependency
-poetry add package-name
+docker compose run --rm web poetry add package-name
 
 # Add development dependency
-poetry add -G dev package-name
+docker compose run --rm web poetry add -G dev package-name
 
 # Add docs dependency
-poetry add -G docs package-name
+docker compose run --rm web poetry add -G docs package-name
 
 # Update dependencies
-poetry update
+docker compose run --rm web poetry update
 
 # Export requirements (rarely needed)
-poetry export -f requirements.txt --output requirements.txt
+docker compose run --rm web poetry export -f requirements.txt --output requirements.txt
+```
+
+After adding dependencies, rebuild the Docker image:
+```bash
+docker compose build web
 ```
 
 ## Architecture

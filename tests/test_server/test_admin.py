@@ -8,11 +8,14 @@ from django.db.models import Model
 from django.test import Client
 from django.urls import reverse
 
+from server.apps.webdav.models import WebDAVSession
+
 # Models that should have restricted (FORBIDDEN) admin add pages
 _RESTRICTED_ADMIN_ADD_MODELS = frozenset((
     AccessAttempt,
     AccessLog,
     AccessFailureLog,
+    WebDAVSession,  # Sessions created via WebDAV connections only
 ))
 
 # Creates a list of tuples containing all registered admin sites,

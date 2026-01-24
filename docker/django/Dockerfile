@@ -63,7 +63,7 @@ RUN apt-get update && apt-get upgrade -y \
 
 WORKDIR /code
 
-RUN groupadd -g "${GID}" -r web \
+RUN (groupadd -g "${GID}" -r web || groupadd -r web) \
   && useradd -d '/code' -g web -l -r -u "${UID}" web \
   && chown web:web -R '/code' \
   # Static and media files:
@@ -73,9 +73,13 @@ RUN groupadd -g "${GID}" -r web \
 # Copy only requirements, to cache them in docker layer:
 COPY --chown=web:web ./poetry.lock ./pyproject.toml /code/
 
+# Configure poetry for container environment:
+RUN poetry config cache-dir /tmp/poetry-cache \
+  && poetry config requests.max-retries 5
+
 # Project initialization:
 # hadolint ignore=SC2046
-RUN --mount=type=cache,target="$POETRY_CACHE_DIR" \
+RUN --mount=type=cache,target="/tmp/poetry-cache" \
   echo "$DJANGO_ENV" \
   && poetry --version && poetry run pip --version \
   && poetry sync \

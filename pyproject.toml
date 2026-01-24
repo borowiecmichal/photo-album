@@ -36,6 +36,8 @@ gunicorn = "^23.0"
 python-decouple = "^3.8"
 structlog = "^25.4"
 wheel = "^0.45"
+wsgidav = "^4.3"
+cheroot = "^10.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -45,6 +47,7 @@ django-extra-checks = "^0.16"
 django-query-counter = "^0.4"
 django-zeal = "^2.0"
 django-drifter = "^0.1"
+django-extensions = "^3.2"
 
 wemake-python-styleguide = "^1.4"
 ruff = "^0.13"
@@ -60,6 +63,7 @@ pytest-timeout = "^2.3"
 django-test-migrations = "^1.5"
 hypothesis = "^6.123"
 moto = { version = "^5.0", extras = ["s3"] }
+webdavclient3 = "^3.14"
 
 django-stubs = { version = ">=5.2,<5.3", extras = ["compatible-mypy"] }
 
@@ -174,5 +178,9 @@ pydocstyle.convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "server/apps/*/migrations/*.py" = ["D101", "E501", "RUF012"]
+"server/apps/*/admin.py" = ["RUF012"]  # Django ModelAdmin class attributes
+"server/apps/*/models.py" = ["RUF012"]  # Django Model Meta class attributes
+"server/apps/*/apps.py" = ["PLC0415"]  # Late import in ready() is Django pattern
+"server/apps/webdav/resources/collection.py" = ["PLC0415"]  # Avoid circular import
 "server/common/typing/*.py" = ["F401"]
 "tests/*.py" = ["S101"]
