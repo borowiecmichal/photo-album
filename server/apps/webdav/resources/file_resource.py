@@ -5,8 +5,10 @@ from io import BytesIO
 from typing import TYPE_CHECKING, BinaryIO, final, override
 
 from django.core.files.base import ContentFile
+from wsgidav.dav_error import HTTP_INSUFFICIENT_STORAGE, DAVError
 from wsgidav.dav_provider import DAVNonCollection
 
+from server.apps.files.exceptions import QuotaExceededError
 from server.apps.files.logic.file_operations import (
     copy_file,
     delete_file,
@@ -176,6 +178,9 @@ class FileResource(DAVNonCollection):
         Args:
             dest_path: Destination WebDAV path.
             is_move: True for move, False for copy.
+
+        Raises:
+            DAVError: HTTP 507 if quota exceeded (for copy operations).
         """
         # Get user from the file instance
         user = self._file.user
@@ -192,7 +197,11 @@ class FileResource(DAVNonCollection):
         )
 
         # Always copy - WsgiDAV calls delete() after for moves
-        copy_file(user, source_storage_path, dest_storage_path)
+        try:
+            copy_file(user, source_storage_path, dest_storage_path)
+        except QuotaExceededError as exc:
+            logger.warning('Quota exceeded during file copy: %s', exc)
+            raise DAVError(HTTP_INSUFFICIENT_STORAGE, str(exc)) from exc
 
     def get_file_instance(self) -> File:
         """Get underlying File model instance.
@@ -224,6 +233,9 @@ class _UploadBuffer(BytesIO):
         """Close buffer and write file to storage.
 
         This is called by WsgiDAV when upload is complete.
+
+        Raises:
+            DAVError: HTTP 507 if quota exceeded.
         """
         if self.closed:
             return
@@ -233,7 +245,11 @@ class _UploadBuffer(BytesIO):
         content = self.read()
 
         if content:
-            self._write_file(content)
+            try:
+                self._write_file(content)
+            except QuotaExceededError as exc:
+                logger.warning('Quota exceeded during file update: %s', exc)
+                raise DAVError(HTTP_INSUFFICIENT_STORAGE, str(exc)) from exc
 
         super().close()
 
@@ -351,7 +367,11 @@ class _NewFileBuffer(BytesIO):
 
     @override
     def close(self) -> None:
-        """Close buffer and create file in storage."""
+        """Close buffer and create file in storage.
+
+        Raises:
+            DAVError: HTTP 507 if quota exceeded.
+        """
         if self.closed:
             return
 
@@ -361,7 +381,11 @@ class _NewFileBuffer(BytesIO):
 
         # Always create file, even if empty
         # Finder sends empty PUT first, then LOCK, then PUT with content
-        self._create_file(content)
+        try:
+            self._create_file(content)
+        except QuotaExceededError as exc:
+            logger.warning('Quota exceeded during file creation: %s', exc)
+            raise DAVError(HTTP_INSUFFICIENT_STORAGE, str(exc)) from exc
 
         super().close()
 

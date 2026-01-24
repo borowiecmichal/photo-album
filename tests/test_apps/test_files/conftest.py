@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from moto import mock_aws
 
+from server.apps.files.models import UserQuota
+
 User = get_user_model()
 
 
@@ -62,3 +64,17 @@ def sample_file_content():
         ContentFile with test data.
     """
     return ContentFile(b'test file content', name='test.txt')
+
+
+@pytest.fixture
+def user_quota(user, db):
+    """Create test user quota.
+
+    Returns:
+        UserQuota instance for testing.
+    """
+    return UserQuota.objects.create(
+        user=user,
+        quota_bytes=10 * 1024 * 1024 * 1024,  # 10 GB
+        used_bytes=0,
+    )

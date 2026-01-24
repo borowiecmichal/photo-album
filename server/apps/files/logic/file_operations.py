@@ -15,6 +15,12 @@ from server.apps.files.infrastructure.metadata import (
     extract_filename,
     validate_storage_path,
 )
+from server.apps.files.logic.quota_operations import (
+    adjust_usage,
+    check_quota,
+    decrement_usage,
+    increment_usage,
+)
 from server.apps.files.models import File
 
 if TYPE_CHECKING:
@@ -54,6 +60,7 @@ def upload_file(
 
     Raises:
         ValidationError: If storage path validation fails.
+        QuotaExceededError: If upload would exceed user's quota.
         Exception: If upload or DB operation fails.
     """
     # Validate storage path follows user isolation rules
@@ -71,6 +78,9 @@ def upload_file(
     else:
         file_size = len(file_obj.read())
         file_obj.seek(0)  # Reset after reading for size
+
+    # Check quota BEFORE upload to prevent orphaned files in S3
+    check_quota(user, file_size)
 
     # Initialize storage
     storage = _get_storage()
@@ -94,6 +104,8 @@ def upload_file(
                 mime_type=mime_type,
                 checksum_sha256=checksum,
             )
+            # Update quota usage
+            increment_usage(user, file_size)
             logger.info(
                 'File record created in database: %s (ID: %d)',
                 saved_name,
@@ -138,9 +150,13 @@ def delete_file(file_id: int) -> None:
     )
 
     # Delete from database - storage cleanup handled by post_delete signal
+    file_size = file_instance.size_bytes
+    file_user = file_instance.user
     try:
         with transaction.atomic():
             file_instance.delete()
+            # Update quota usage
+            decrement_usage(file_user, file_size)
             logger.info('File record deleted from database: ID=%d', file_id)
     except Exception:
         logger.exception('Failed to delete file from database: ID=%d', file_id)
@@ -347,6 +363,7 @@ def copy_file(user: User, source_path: str, dest_path: str) -> File:
     Raises:
         File.DoesNotExist: If source file not found.
         ValidationError: If destination path validation fails.
+        QuotaExceededError: If copy would exceed user's quota.
     """
     # Validate destination path follows user isolation rules
     validate_storage_path(user.id, dest_path)
@@ -354,6 +371,9 @@ def copy_file(user: User, source_path: str, dest_path: str) -> File:
     # Get source file
     source_file = File.objects.get(user=user, file=source_path)
     storage = _get_storage()
+
+    # Check quota BEFORE copy to prevent orphaned files in S3
+    check_quota(user, source_file.size_bytes)
 
     logger.info(
         'Copying file from %s to %s',
@@ -383,6 +403,8 @@ def copy_file(user: User, source_path: str, dest_path: str) -> File:
             )
             # Copy tags from source file
             new_file.tags.set(source_file.tags.all())
+            # Update quota usage
+            increment_usage(user, source_file.size_bytes)
             logger.info(
                 'File record created: %s (ID: %d)',
                 dest_path,
@@ -419,11 +441,13 @@ def update_file_content(
 
     Raises:
         File.DoesNotExist: If file not found.
+        QuotaExceededError: If update would exceed user's quota.
         Exception: If upload or DB operation fails.
     """
     # Get existing file
     file_instance = File.objects.get(id=file_id)
     old_storage_path = file_instance.file.name
+    old_size = file_instance.size_bytes
     storage = _get_storage()
 
     # Extract filename and calculate new metadata
@@ -432,6 +456,11 @@ def update_file_content(
     mime_type = detect_mime_type(file_obj, filename)
     file_size = _get_file_size(file_obj)
 
+    # Check quota for size increase only
+    size_increase = file_size - old_size
+    if size_increase > 0:
+        check_quota(file_instance.user, size_increase)
+
     logger.info('Updating file content: %s (ID: %d)', old_storage_path, file_id)
 
     # Upload new content, update DB, cleanup old content
@@ -439,6 +468,7 @@ def update_file_content(
         file_instance,
         storage,
         old_storage_path,
+        old_size,
         file_size,
         mime_type,
         checksum,
@@ -468,6 +498,7 @@ def _upload_and_update_file(  # noqa: WPS211
     file_instance: File,
     storage: 'FileStorage',
     old_storage_path: str,
+    old_size: int,
     file_size: int,
     mime_type: str,
     checksum: str,
@@ -479,6 +510,7 @@ def _upload_and_update_file(  # noqa: WPS211
         file_instance: File model instance to update.
         storage: Storage backend.
         old_storage_path: Current storage path.
+        old_size: Previous file size in bytes.
         file_size: New file size.
         mime_type: New MIME type.
         checksum: New checksum.
@@ -509,6 +541,8 @@ def _upload_and_update_file(  # noqa: WPS211
                 'checksum_sha256',
                 'modified_at',
             ])
+            # Update quota usage
+            adjust_usage(file_instance.user, old_size, file_size)
     except Exception:
         logger.exception('DB update failed, rolling back')
         storage.rollback_upload(temp_storage_path)

@@ -195,3 +195,78 @@ class Tag(models.Model):
     def __str__(self) -> str:
         """String representation."""
         return f'{self.user.username}:{self.name}'
+
+
+# Default quota: 10 GB in bytes
+_DEFAULT_QUOTA_BYTES: Final = 10 * 1024 * 1024 * 1024
+
+
+@final
+class UserQuota(models.Model):
+    """Storage quota for a user.
+
+    Tracks user's storage limit and current usage. Quota includes all files
+    including soft-deleted files (trash) to prevent circumventing limits.
+
+    When over quota, users can still read and delete files, but uploads
+    are blocked until usage falls below the limit.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='quota',
+        primary_key=True,
+    )
+
+    quota_bytes = models.BigIntegerField(
+        default=_DEFAULT_QUOTA_BYTES,
+        help_text='Storage quota limit in bytes',
+    )
+
+    used_bytes = models.BigIntegerField(
+        default=0,
+        help_text='Currently used storage in bytes',
+    )
+
+    class Meta:
+        """Model metadata."""
+
+        verbose_name = 'User Quota'  # type: ignore[mutable-override]
+        verbose_name_plural = 'User Quotas'  # type: ignore[mutable-override]
+
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(quota_bytes__gte=0),
+                name='quota_bytes_non_negative',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(used_bytes__gte=0),
+                name='used_bytes_non_negative',
+            ),
+        ]
+
+    @override
+    def __str__(self) -> str:
+        """String representation."""
+        return f'{self.user.username}: {self.used_bytes}/{self.quota_bytes}'
+
+    def has_space_for(self, size_bytes: int) -> bool:
+        """Check if there's enough space for the given size.
+
+        Args:
+            size_bytes: Size to check in bytes.
+
+        Returns:
+            True if there's enough space, False otherwise.
+        """
+        return self.used_bytes + size_bytes <= self.quota_bytes
+
+    def available_bytes(self) -> int:
+        """Get available storage space.
+
+        Returns:
+            Available bytes (never negative).
+        """
+        available = self.quota_bytes - self.used_bytes
+        return max(0, available)
