@@ -258,3 +258,10 @@ artifacts/
 
 # safety:
 .safety/
+
+# Claude Code:
+.claude/
+
+# Local machine config (not to be committed):
+.config/
+.local/
