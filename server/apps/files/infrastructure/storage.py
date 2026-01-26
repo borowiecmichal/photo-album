@@ -91,3 +91,36 @@ class FileStorage(S3Storage):
                 'Failed to rollback upload, orphaned file: %s',
                 name,
             )
+
+    def move_object(self, source: str, destination: str) -> None:
+        """Move/rename an object in S3 storage.
+
+        S3 doesn't support native rename, so this performs a server-side
+        copy followed by deletion of the source.
+
+        Note: This operation is not atomic. If copy succeeds but delete
+        fails, both files will exist (source becomes orphaned). This is
+        acceptable as orphaned files can be cleaned up by a maintenance
+        job, and no data is lost.
+
+        Args:
+            source: Source storage path.
+            destination: Destination storage path.
+
+        Raises:
+            Exception: If copy or delete fails.
+        """
+        try:
+            logger.info('Moving file: %s -> %s', source, destination)
+            # Server-side copy using boto3
+            copy_source = {
+                'Bucket': self.bucket_name,
+                'Key': source,
+            }
+            self.bucket.copy(copy_source, destination)
+            # Delete source after successful copy
+            self.delete(source)
+            logger.info('Moved file: %s -> %s', source, destination)
+        except Exception:
+            logger.exception('Move failed: %s -> %s', source, destination)
+            raise

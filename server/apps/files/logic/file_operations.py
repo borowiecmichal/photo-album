@@ -527,15 +527,13 @@ def _upload_and_update_file(  # noqa: WPS211
         logger.exception('Failed to upload: %s', temp_storage_path)
         raise
 
-    # Step 2: Update database record atomically
+    # Step 2: Update database record atomically (keep original path)
     try:
         with transaction.atomic():
-            file_instance.file.name = temp_storage_path
             file_instance.size_bytes = file_size
             file_instance.mime_type = mime_type
             file_instance.checksum_sha256 = checksum
             file_instance.save(update_fields=[
-                'file',
                 'size_bytes',
                 'mime_type',
                 'checksum_sha256',
@@ -548,11 +546,35 @@ def _upload_and_update_file(  # noqa: WPS211
         storage.rollback_upload(temp_storage_path)
         raise
 
-    # Step 3: Delete old content from storage (best effort)
+    # Step 3: Move temp to original path (S3 copy overwrites destination)
     try:
-        storage.delete(old_storage_path)
+        storage.move_object(temp_storage_path, old_storage_path)
     except Exception:
-        logger.exception('Failed to delete old content: %s', old_storage_path)
+        # Temp file still exists with new content
+        # Update DB to point to temp as fallback
+        logger.exception('Failed to move temp to original path')
+        _update_file_path_fallback(file_instance, temp_storage_path)
+
+
+def _update_file_path_fallback(file_instance: File, temp_path: str) -> None:
+    """Update file path to temp path as fallback when move fails.
+
+    This is a last-resort operation to maintain data consistency.
+    If this fails, manual intervention is required.
+
+    Args:
+        file_instance: File model instance to update.
+        temp_path: Temporary storage path to set.
+    """
+    try:
+        file_instance.file.name = temp_path
+        file_instance.save(update_fields=['file', 'modified_at'])
+        logger.warning('Updated DB to fallback temp path: %s', temp_path)
+    except Exception:
+        logger.critical(
+            'CRITICAL: Failed to update DB fallback path: %s',
+            temp_path,
+        )
 
 
 def move_folder(user: User, old_prefix: str, new_prefix: str) -> int:
