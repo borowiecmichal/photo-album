@@ -82,7 +82,7 @@ services:
 
   webdav:
     <<: *web
-    command: python manage.py run_webdav_server --verbose=5
+    command: python manage.py run_webdav_server --verbose=5 --reload
     ports:
       - "8080:8080"
     healthcheck:
