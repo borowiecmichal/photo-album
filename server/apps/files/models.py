@@ -1,10 +1,11 @@
 """Database models for files app."""
 
 from pathlib import Path
-from typing import Final, final, override
+from typing import TYPE_CHECKING, Final, final, override
 
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models import QuerySet
 
 User = get_user_model()
 
@@ -13,6 +14,24 @@ _MIME_TYPE_MAX_LENGTH: Final = 255
 _CHECKSUM_MAX_LENGTH: Final = 64  # SHA256 hex length
 _TAG_NAME_MAX_LENGTH: Final = 100
 _TAG_COLOR_MAX_LENGTH: Final = 7  # Hex color: #RRGGBB
+_ORIGINAL_PATH_MAX_LENGTH: Final = 1024
+_TRASH_NAME_MAX_LENGTH: Final = 512
+
+if TYPE_CHECKING:
+    from server.apps.files.models import File as FileType
+
+
+class ActiveFileManager(models.Manager['FileType']):
+    """Default manager that excludes soft-deleted files."""
+
+    @override
+    def get_queryset(self) -> 'QuerySet[FileType]':
+        """Return only non-deleted files."""
+        return super().get_queryset().filter(is_deleted=False)
+
+
+class AllFilesManager(models.Manager['FileType']):
+    """Manager that includes all files (for trash operations)."""
 
 
 @final
@@ -68,6 +87,39 @@ class File(models.Model):
         blank=True,
     )
 
+    # Soft delete / trash fields
+    is_deleted = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='True if file is in trash',
+    )
+
+    deleted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='When file was moved to trash',
+    )
+
+    original_path = models.CharField(
+        max_length=_ORIGINAL_PATH_MAX_LENGTH,
+        blank=True,
+        default='',
+        help_text='Original storage path before deletion (for restore)',
+    )
+
+    trash_name = models.CharField(
+        max_length=_TRASH_NAME_MAX_LENGTH,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Unique filename in trash (includes timestamp)',
+    )
+
+    # Custom managers
+    objects = ActiveFileManager()  # Default: excludes deleted
+    all_objects = AllFilesManager()  # Includes deleted
+
     class Meta:
         """Model metadata."""
 
@@ -85,6 +137,16 @@ class File(models.Model):
             models.Index(
                 fields=['user', '-uploaded_at'],
                 name='files_user_recent_idx',
+            ),
+            # Optimize trash listing queries
+            models.Index(
+                fields=['user', 'is_deleted', 'deleted_at'],
+                name='files_user_trash_idx',
+            ),
+            # Optimize trash lookup by name
+            models.Index(
+                fields=['user', 'trash_name'],
+                name='files_user_trash_name_idx',
             ),
         ]
 

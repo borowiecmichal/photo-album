@@ -9,6 +9,9 @@ from typing import Final, final
 # Character used to split storage paths
 _PATH_SEPARATOR: Final = '/'
 
+# Special trash path
+_TRASH_PATH: Final = '/.Trash'
+
 
 @final
 class PathMapper:
@@ -161,3 +164,43 @@ class PathMapper:
 
         # Check for null bytes
         return '\x00' not in webdav_path
+
+    def is_trash_path(self, webdav_path: str) -> bool:
+        """Check if path is the trash folder or within it.
+
+        Args:
+            webdav_path: WebDAV path to check.
+
+        Returns:
+            True if path is /.Trash or /.Trash/something.
+        """
+        normalized = webdav_path.rstrip(_PATH_SEPARATOR)
+        return normalized == _TRASH_PATH or normalized.startswith(
+            _TRASH_PATH + _PATH_SEPARATOR,
+        )
+
+    def is_trash_root(self, webdav_path: str) -> bool:
+        """Check if path is exactly /.Trash/.
+
+        Args:
+            webdav_path: WebDAV path to check.
+
+        Returns:
+            True if path is the trash root.
+        """
+        return webdav_path.rstrip(_PATH_SEPARATOR) == _TRASH_PATH
+
+    def get_trash_item_name(self, webdav_path: str) -> str:
+        """Extract item name from trash path like /.Trash/filename.
+
+        Args:
+            webdav_path: Trash path (e.g., /.Trash/report.pdf).
+
+        Returns:
+            Item name (e.g., report.pdf), empty string if not a trash item.
+        """
+        normalized = webdav_path.strip(_PATH_SEPARATOR)
+        prefix = '.Trash/'
+        if normalized.startswith(prefix):
+            return normalized[len(prefix):]
+        return ''

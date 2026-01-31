@@ -5,15 +5,21 @@ Django models and S3 storage.
 """
 
 import logging
-from typing import final, override
+from pathlib import Path
+from typing import TYPE_CHECKING, final, override
 
 from wsgidav.dav_provider import DAVCollection, DAVNonCollection, DAVProvider
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
 
 from server.apps.files.models import File
 from server.apps.webdav.path_mapper import PathMapper
 from server.apps.webdav.resources.base import get_user_from_environ
 from server.apps.webdav.resources.collection import FolderCollection
 from server.apps.webdav.resources.file_resource import FileResource
+from server.apps.webdav.resources.trash_collection import TrashCollection
+from server.apps.webdav.resources.trash_file_resource import TrashFileResource
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +74,10 @@ class DjangoDAVProvider(DAVProvider):
             user.username,
         )
 
+        # Handle trash paths before normal paths
+        if path_mapper.is_trash_path(path):
+            return self._get_trash_resource(path, environ, user, path_mapper)
+
         # Check if it's the root directory
         if path_mapper.is_root(path):
             return FolderCollection(path, environ, user, path_mapper)
@@ -103,6 +113,48 @@ class DjangoDAVProvider(DAVProvider):
         # Path doesn't exist
         # Note: Empty folders are supported via marker files created by MKCOL
         logger.debug('Resource not found: %s', path)
+        return None
+
+    def _get_trash_resource(
+        self,
+        path: str,
+        environ: dict,
+        user: 'User',
+        path_mapper: PathMapper,
+    ) -> DAVCollection | DAVNonCollection | None:
+        """Get resource for trash paths.
+
+        Args:
+            path: WebDAV path (/.Trash or /.Trash/filename).
+            environ: WSGI environ dictionary.
+            user: Authenticated user.
+            path_mapper: PathMapper instance.
+
+        Returns:
+            TrashCollection for /.Trash, TrashFileResource for files,
+            or None if not found.
+        """
+        if path_mapper.is_trash_root(path):
+            return TrashCollection(path, environ, user, path_mapper)
+
+        # Get specific file from trash by display name
+        trash_item = path_mapper.get_trash_item_name(path)
+        if not trash_item:
+            return None
+
+        # Find file by original filename
+        files = File.all_objects.filter(
+            user=user,
+            is_deleted=True,
+        )
+        for file_obj in files:
+            if Path(file_obj.original_path).name == trash_item:
+                return TrashFileResource(
+                    path,
+                    environ,
+                    file_obj,
+                    path_mapper,
+                )
         return None
 
     @override

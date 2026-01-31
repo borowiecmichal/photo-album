@@ -7,10 +7,8 @@ from typing import TYPE_CHECKING, final, override
 from django.core.files.base import ContentFile
 from wsgidav.dav_provider import DAVCollection
 
-from server.apps.files.logic.file_operations import (
-    delete_file,
-    upload_file,
-)
+from server.apps.files.logic.file_operations import upload_file
+from server.apps.files.logic.trash_operations import soft_delete_file
 from server.apps.files.models import File
 from server.apps.webdav.path_mapper import PathMapper
 from server.apps.webdav.resources.file_resource import (
@@ -159,6 +157,15 @@ class FolderCollection(DAVCollection):
         # Filter out hidden files (markers, .DS_Store, AppleDouble ._* files)
         members = {m for m in members if not _is_hidden_file(m)}
 
+        # Add .Trash to root if user has deleted files
+        is_root = self._path_mapper.is_root(self.path)
+        has_trash = File.all_objects.filter(
+            user=self._user,
+            is_deleted=True,
+        ).exists()
+        if is_root and has_trash:
+            members.add('.Trash')
+
         return sorted(members)
 
     @override
@@ -174,6 +181,18 @@ class FolderCollection(DAVCollection):
         Raises:
             Exception: If member doesn't exist.
         """
+        # Handle .Trash in root
+        if name == '.Trash' and self._path_mapper.is_root(self.path):
+            from server.apps.webdav.resources.trash_collection import (
+                TrashCollection,
+            )
+            return TrashCollection(
+                '/.Trash/',
+                self.environ,
+                self._user,
+                self._path_mapper,
+            )
+
         child_path = self._path_mapper.join_paths(self.path, name)
         storage_path = self._path_mapper.to_storage_path(child_path)
 
@@ -270,15 +289,15 @@ class FolderCollection(DAVCollection):
 
     @override
     def delete(self) -> None:
-        """Delete this folder and all its contents.
+        """Soft delete this folder and all its contents.
 
-        Recursively deletes all files in this folder.
+        Moves all files in this folder to trash.
         """
         storage_path = self._path_mapper.to_storage_path(self.path)
         prefix = storage_path.rstrip('/') + '/'
 
         logger.info(
-            'Deleting folder and contents: %s (prefix: %s)',
+            'Soft deleting folder and contents: %s (prefix: %s)',
             self.path,
             prefix,
         )
@@ -289,13 +308,13 @@ class FolderCollection(DAVCollection):
             file__startswith=prefix,
         )
 
-        # Delete each file
+        # Soft delete each file
         for file_instance in files:
             try:
-                delete_file(file_instance.id)
+                soft_delete_file(file_instance.id)
             except Exception:
                 logger.exception(
-                    'Failed to delete file in folder: %s',
+                    'Failed to soft delete file in folder: %s',
                     file_instance.file.name,
                 )
                 raise

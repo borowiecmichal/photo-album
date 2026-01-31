@@ -179,9 +179,10 @@ pydocstyle.convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "server/apps/*/migrations/*.py" = ["D101", "E501", "RUF012"]
-"server/apps/*/admin.py" = ["RUF012"]  # Django ModelAdmin class attributes
+"server/apps/*/admin.py" = ["PLC0415", "RUF012"]  # Late imports, Django attributes
 "server/apps/*/models.py" = ["RUF012"]  # Django Model Meta class attributes
 "server/apps/*/apps.py" = ["PLC0415"]  # Late import in ready() is Django pattern
+"server/apps/*/logic/*.py" = ["PLC0415"]  # Avoid circular imports in business logic
 "server/apps/webdav/resources/collection.py" = ["PLC0415"]  # Avoid circular import
 "server/common/typing/*.py" = ["F401"]
 "tests/*.py" = ["S101"]

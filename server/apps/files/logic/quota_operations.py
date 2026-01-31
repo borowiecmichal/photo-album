@@ -145,6 +145,7 @@ def recalculate_usage(user: _User) -> int:
     """Recalculate user's storage usage from actual files.
 
     This is useful for fixing inconsistencies or after bulk operations.
+    Includes files in trash since they still count against quota.
 
     Args:
         user: User to recalculate usage for.
@@ -152,8 +153,8 @@ def recalculate_usage(user: _User) -> int:
     Returns:
         New calculated usage in bytes.
     """
-    # Sum all file sizes for this user
-    total = File.objects.filter(user=user).aggregate(
+    # Sum all file sizes for this user (including trash)
+    total = File.all_objects.filter(user=user).aggregate(
         total=Sum('size_bytes'),
     )['total'] or 0
 

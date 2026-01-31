@@ -19,10 +19,13 @@ class FileAdmin(admin.ModelAdmin[File]):
         'folder_path_display',
         'size_display',
         'mime_type',
+        'is_deleted',
+        'deleted_at',
         'uploaded_at',
     ]
 
     list_filter = [
+        'is_deleted',
         'mime_type',
         'uploaded_at',
         'user',
@@ -31,6 +34,8 @@ class FileAdmin(admin.ModelAdmin[File]):
     search_fields = [
         'file',  # Searches file.name field
         'checksum_sha256',
+        'original_path',
+        'trash_name',
     ]
 
     readonly_fields = [
@@ -40,9 +45,14 @@ class FileAdmin(admin.ModelAdmin[File]):
         'checksum_sha256',
         'uploaded_at',
         'modified_at',
+        'deleted_at',
+        'original_path',
+        'trash_name',
     ]
 
     filter_horizontal = ['tags']  # Better UX for M2M relationship
+
+    actions = ['restore_files', 'permanently_delete']
 
     fieldsets = (
         ('File Information', {
@@ -57,6 +67,14 @@ class FileAdmin(admin.ModelAdmin[File]):
         }),
         ('Tags', {
             'fields': ('tags',),
+        }),
+        ('Trash Status', {
+            'fields': (
+                'is_deleted',
+                'deleted_at',
+                'original_path',
+                'trash_name',
+            ),
         }),
         ('Timestamps', {
             'fields': ('uploaded_at', 'modified_at'),
@@ -109,15 +127,59 @@ class FileAdmin(admin.ModelAdmin[File]):
     size_display.short_description = 'Size'  # type: ignore[attr-defined]
 
     def get_queryset(self, request: HttpRequest) -> QuerySet[File]:
-        """Optimize queryset with select_related.
+        """Return all files including deleted (use all_objects manager).
 
         Args:
             request: HTTP request.
 
         Returns:
-            Optimized QuerySet.
+            QuerySet including deleted files.
         """
-        return super().get_queryset(request).select_related('user')
+        return File.all_objects.all().select_related('user')
+
+    @admin.action(description='Restore selected files from trash')
+    def restore_files(
+        self,
+        request: HttpRequest,
+        queryset: QuerySet[File],
+    ) -> None:
+        """Restore selected files from trash.
+
+        Args:
+            request: HTTP request.
+            queryset: Selected files.
+        """
+        from server.apps.files.logic.trash_operations import restore_file
+
+        count = 0
+        for file_obj in queryset.filter(is_deleted=True):
+            restore_file(file_obj.id)
+            count += 1
+
+        self.message_user(request, f'Restored {count} files from trash')
+
+    @admin.action(description='Permanently delete selected files')
+    def permanently_delete(
+        self,
+        request: HttpRequest,
+        queryset: QuerySet[File],
+    ) -> None:
+        """Permanently delete selected files (must be in trash).
+
+        Args:
+            request: HTTP request.
+            queryset: Selected files.
+        """
+        from server.apps.files.logic.trash_operations import (
+            permanent_delete_file,
+        )
+
+        count = 0
+        for file_obj in queryset.filter(is_deleted=True):
+            permanent_delete_file(file_obj.id)
+            count += 1
+
+        self.message_user(request, f'Permanently deleted {count} files')
 
 
 @admin.register(Tag)

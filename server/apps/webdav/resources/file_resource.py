@@ -11,10 +11,10 @@ from wsgidav.dav_provider import DAVNonCollection
 from server.apps.files.exceptions import QuotaExceededError
 from server.apps.files.logic.file_operations import (
     copy_file,
-    delete_file,
     update_file_content,
     upload_file,
 )
+from server.apps.files.logic.trash_operations import soft_delete_file
 from server.apps.files.models import File
 from server.apps.webdav.path_mapper import PathMapper
 
@@ -137,13 +137,13 @@ class FileResource(DAVNonCollection):
 
     @override
     def delete(self) -> None:
-        """Delete the file from storage and database.
+        """Soft delete the file (move to trash).
 
-        Uses the files app delete_file operation which handles
-        transaction safety (DB first, then S3).
+        Uses the files app soft_delete_file operation which
+        marks the file as deleted but preserves it in S3.
         """
-        logger.info('Deleting file via WebDAV: %s', self._file.file.name)
-        delete_file(self._file.id)
+        logger.info('Soft deleting file via WebDAV: %s', self._file.file.name)
+        soft_delete_file(self._file.id)
 
     @override
     def support_ranges(self) -> bool:
