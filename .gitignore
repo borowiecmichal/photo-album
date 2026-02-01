@@ -262,6 +262,10 @@ artifacts/
 # Claude Code:
 .claude/
 
+# Claude-mem auto-generated CLAUDE.md files (keep root CLAUDE.md):
+**/CLAUDE.md
+!/CLAUDE.md
+
 # Local machine config (not to be committed):
 .config/
 .local/
